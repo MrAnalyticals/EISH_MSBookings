@@ -17,6 +17,22 @@ After loading all three queries in Power BI/Excel:
 
 This follows Star Schema best practices for optimal performance and reusability.
 
+===============================================================================
+DYNAMIC DATA REFRESH:
+===============================================================================
+This query uses "static base URLs" (e.g., https://graph.microsoft.com) with
+RelativePath parameters to comply with Power BI Service requirements.
+
+IMPORTANT: Your data is STILL FULLY DYNAMIC!
+Every time you refresh, this query:
+✓ Gets a fresh list of ALL current booking businesses
+✓ Retrieves current appointments for each business
+✓ Automatically includes new appointments
+✓ Automatically excludes deleted appointments
+✓ Adapts if businesses are added or removed
+
+The "static" part is just the domain name - everything else updates dynamically!
+
 INSTRUCTIONS:
 1. Copy this entire query
 2. In Power BI/Excel: Get Data > Blank Query
@@ -56,9 +72,6 @@ let
     // We use the OAuth 2.0 Client Credentials flow for app-only authentication
     // This allows the app to access data without requiring user interaction
     
-    // Construct the token endpoint URL for our tenant
-    TokenUrl = "https://login.microsoftonline.com/" & TenantId & "/oauth2/v2.0/token",
-    
     // Build the request body with our credentials
     // Format: URL-encoded form data required by OAuth 2.0 spec
     TokenBody = "client_id=" & ClientId 
@@ -67,11 +80,12 @@ let
                 & "&grant_type=client_credentials",              // Client credentials flow
     
     // Make HTTP POST request to get access token
-    // This token is valid for ~60 minutes and auto-refreshes on query refresh
+    // Using static base URL with RelativePath to avoid "dynamic data source" error
     TokenResponse = Json.Document(
         Web.Contents(
-            TokenUrl,
+            "https://login.microsoftonline.com",
             [
+                RelativePath = TenantId & "/oauth2/v2.0/token",
                 Headers = [#"Content-Type" = "application/x-www-form-urlencoded"],
                 Content = Text.ToBinary(TokenBody)
             ]
@@ -87,16 +101,18 @@ let
     // ============================================================================
     // This reusable function makes authenticated GET requests to Microsoft Graph
     // It handles errors gracefully by returning null instead of breaking the query
+    // Uses RelativePath to avoid "dynamic data source" errors in Power BI Service
     
-    GetGraphData = (url as text) as any =>
+    GetGraphData = (relativePath as text) as any =>
         let
             // Attempt to call the API and parse JSON response
             Response = try Json.Document(
                 Web.Contents(
-                    url,
+                    "https://graph.microsoft.com",
                     [
+                        RelativePath = relativePath,
                         Headers = [
-                            Authorization = "Bearer " & AccessToken,  // Include our access token
+                            Authorization = "Bearer " & AccessToken,
                             #"Content-Type" = "application/json"
                         ]
                     ]
@@ -111,11 +127,8 @@ let
     // This section retrieves ALL booking calendars in your Microsoft 365 tenant
     // No hardcoded IDs - it automatically finds everything available
     
-    // Construct the URL for the bookings businesses endpoint
-    BusinessesUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses",
-    
     // Call the API to get all booking businesses
-    BusinessesResponse = GetGraphData(BusinessesUrl),
+    BusinessesResponse = GetGraphData("v1.0/solutions/bookingBusinesses"),
     
     // Extract the array of businesses from the response
     // The 'value' property contains the array of business objects
@@ -155,12 +168,12 @@ let
     
     GetAppointments = (businessId as text) as table =>
         let
-            // Build the API URL for this specific business's appointments
-            AppointmentsUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/" 
+            // Build the API relative path for this specific business's appointments
+            AppointmentsPath = "v1.0/solutions/bookingBusinesses/" 
                             & businessId & "/appointments",
             
             // Call the API to get appointments
-            AppointmentsResponse = GetGraphData(AppointmentsUrl),
+            AppointmentsResponse = GetGraphData(AppointmentsPath),
             
             // Extract the appointments array from the response
             // Returns empty list if API fails or business has no appointments
@@ -229,12 +242,12 @@ let
     
     GetServices = (businessId as text) as table =>
         let
-            // Build the API URL for this business's services
-            ServicesUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/" 
+            // Build the API relative path for this business's services
+            ServicesPath = "v1.0/solutions/bookingBusinesses/" 
                         & businessId & "/services",
             
             // Call the API to get services
-            ServicesResponse = GetGraphData(ServicesUrl),
+            ServicesResponse = GetGraphData(ServicesPath),
             
             // Extract services array from response
             ServicesList = 
@@ -279,12 +292,12 @@ let
     
     GetStaff = (businessId as text) as table =>
         let
-            // Build the API URL for this business's staff
-            StaffUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/" 
+            // Build the API relative path for this business's staff
+            StaffPath = "v1.0/solutions/bookingBusinesses/" 
                      & businessId & "/staffMembers",
             
             // Call the API to get staff
-            StaffResponse = GetGraphData(StaffUrl),
+            StaffResponse = GetGraphData(StaffPath),
             
             // Extract staff array from response
             StaffList = 

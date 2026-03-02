@@ -12,6 +12,19 @@ USAGE:
 4. Name the query "BookingServices"
 
 ===============================================================================
+DYNAMIC DATA REFRESH:
+===============================================================================
+This query uses "static base URLs" with RelativePath for Power BI Service.
+
+Your data is STILL FULLY DYNAMIC! Every refresh:
+✓ Gets current list of all booking businesses
+✓ Retrieves current services for each business
+✓ New services automatically appear
+✓ Deleted services automatically disappear
+✓ Service changes (price, duration, etc.) update immediately
+
+The "static" part is just the domain - all data updates dynamically!
+===============================================================================
 */
 
 let
@@ -20,50 +33,56 @@ let
     ClientId = "YOUR_CLIENT_ID_HERE",
     ClientSecret = "YOUR_CLIENT_SECRET_HERE",
     
-    // Get Access Token
-    TokenUrl = "https://login.microsoftonline.com/" & TenantId & "/oauth2/v2.0/token",
-    TokenBody = "client_id=" & ClientId 
-                & "&scope=https://graph.microsoft.com/.default"
-                & "&client_secret=" & ClientSecret
-                & "&grant_type=client_credentials",
-    TokenResponse = Json.Document(
-        Web.Contents(
-            TokenUrl,
-            [
-                Headers = [#"Content-Type" = "application/x-www-form-urlencoded"],
-                Content = Text.ToBinary(TokenBody)
-            ]
-        )
-    ),
-    AccessToken = TokenResponse[access_token],
-    
-    // Get All Booking Businesses
-    BusinessesUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses",
-    BusinessesResponse = Json.Document(
-        Web.Contents(
-            BusinessesUrl,
-            [Headers = [Authorization = "Bearer " & AccessToken]]
-        )
-    ),
-    BusinessesList = BusinessesResponse[value],
-    
-    // Function to get services for a business
+    // Complete self-contained function that doesn't reference external steps
+    GetAllServices = () =>
+        let
+            // Get Access Token inline
+            TokenBody = "client_id=" & ClientId 
+                        & "&scope=https://graph.microsoft.com/.default"
+                        & "&client_secret=" & ClientSecret
+                        & "&grant_type=client_credentials",
+            AccessToken = Json.Document(
+                Web.Contents(
+                    "https://login.microsoftonline.com",
+                    [
+                        RelativePath = TenantId & "/oauth2/v2.0/token",
+                        Headers = [#"Content-Type" = "application/x-www-form-urlencoded"],
+                        Content = Text.ToBinary(TokenBody)
+                    ]
+                )
+            )[access_token],
+            
+            // Get All Booking Businesses inline
+            BusinessesList = Json.Document(
+                Web.Contents(
+                    "https://graph.microsoft.com",
+                    [
+                        RelativePath = "v1.0/solutions/bookingBusinesses",
+                        Headers = [Authorization = "Bearer " & AccessToken]
+                    ]
+                )
+            )[value],
+            
+            // Function to get services for a business
     GetServices = (businessId as text, businessName as text) as table =>
         let
-            ServicesUrl = "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/" 
+            ServicesPath = "v1.0/solutions/bookingBusinesses/" 
                         & businessId & "/services",
             ServicesResponse = try Json.Document(
                 Web.Contents(
-                    ServicesUrl,
-                    [Headers = [Authorization = "Bearer " & AccessToken]]
+                    "https://graph.microsoft.com",
+                    [
+                        RelativePath = ServicesPath,
+                        Headers = [Authorization = "Bearer " & AccessToken]
+                    ]
                 )
             ) otherwise [value = {}],
             ServicesList = ServicesResponse[value],
             ServicesTable = 
                 if List.Count(ServicesList) = 0 
                 then #table(
-                    {"ServiceId", "ServiceName", "Duration", "Price", "PriceType", 
-                     "Description", "IsHidden", "MaxAttendees", "BusinessId", "BusinessName"}, 
+                    {"ServiceId", "ServiceDisplayName", "ServiceDuration", 
+                     "ServicePrice", "ServiceDescription", "BusinessId", "BusinessName"}, 
                     {}
                 )
                 else 
@@ -72,11 +91,9 @@ let
                         ExpandedTable = Table.ExpandRecordColumn(
                             TempTable,
                             "Column1",
-                            {"id", "displayName", "defaultDuration", "defaultPrice", 
-                             "defaultPriceType", "description", "isHiddenFromCustomers", 
-                             "maximumAttendeesCount"},
-                            {"ServiceId", "ServiceName", "Duration", "Price", 
-                             "PriceType", "Description", "IsHidden", "MaxAttendees"}
+                            {"id", "displayName", "defaultDuration", "defaultPrice", "description"},
+                            {"ServiceId", "ServiceDisplayName", "ServiceDuration", 
+                             "ServicePrice", "ServiceDescription"}
                         ),
                         AddBusinessInfo = Table.AddColumn(
                             Table.AddColumn(
@@ -102,10 +119,15 @@ let
     CombinedServices = Table.Combine(ServicesFromAllBusinesses),
     
     // Reorder columns
-    ReorderColumns = Table.ReorderColumns(
+    Result = Table.ReorderColumns(
         CombinedServices,
-        {"BusinessId", "BusinessName", "ServiceId", "ServiceName", 
-         "Duration", "Price", "PriceType", "Description", "IsHidden", "MaxAttendees"}
+        {"BusinessId", "BusinessName", "ServiceId", "ServiceDisplayName", 
+         "ServiceDuration", "ServicePrice", "ServiceDescription"}
     )
 in
-    ReorderColumns
+    Result,
+
+// Execute the function and return result
+FinalResult = GetAllServices()
+in
+FinalResult
