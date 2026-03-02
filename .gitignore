@@ -1,0 +1,31 @@
+# Environment variables with credentials
+.env
+
+# Exported CSV data files
+*.csv
+
+# Build outputs
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio cache/options
+.vs/
+*.cache
+
+# NuGet packages
+*.nupkg
+packages/
+
+# Other sensitive or temporary files
+*.log
+.DS_Store
+Thumbs.db
