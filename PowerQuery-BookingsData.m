@@ -205,10 +205,12 @@ let
                             "Column1",
                             {"id", "customerName", "customerEmailAddress", "customerPhone",
                              "serviceId", "serviceName", "start", "end", "duration",
-                             "isLocationOnline", "onlineMeetingUrl", "additionalInformation"},
+                             "isLocationOnline", "onlineMeetingUrl", "additionalInformation",
+                             "staffMemberIds"},
                             {"AppointmentId", "CustomerName", "CustomerEmail", "CustomerPhone",
                              "ServiceId", "ServiceName", "Start", "End", "Duration",
-                             "IsLocationOnline", "OnlineMeetingUrl", "AdditionalInfo"}
+                             "IsLocationOnline", "OnlineMeetingUrl", "AdditionalInfo",
+                             "StaffMemberIds"}
                         ),
                         
                         // Extract start datetime from nested record structure
@@ -228,9 +230,17 @@ let
                         
                         // Remove the original nested Start and End columns
                         // We now have flattened StartDateTime and EndDateTime instead
-                        RemoveTempColumns = Table.RemoveColumns(ExtractEnd, {"Start", "End"})
+                        RemoveTempColumns = Table.RemoveColumns(ExtractEnd, {"Start", "End"}),
+                        
+                        // Expand staffMemberIds array into multiple rows (Bridge Table pattern)
+                        // This creates one row per staff member assigned to each appointment
+                        // Appointments with multiple staff (12.7%) will become multiple rows
+                        ExpandStaff = Table.ExpandListColumn(RemoveTempColumns, "StaffMemberIds"),
+                        
+                        // Rename the expanded column to match relationship naming convention
+                        RenameStaffId = Table.RenameColumns(ExpandStaff, {{"StaffMemberIds", "StaffId"}})
                     in
-                        RemoveTempColumns
+                        RenameStaffId
         in
             AppointmentsTable,
     
