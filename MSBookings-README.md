@@ -22,37 +22,38 @@ These queries follow **data warehousing best practices** with a **Star Schema** 
 ### Star Schema Diagram
 
 ```
-┌─────────────────────┐
-│  Bookings_Services  │ (Dimension Table)
-│  ─────────────────  │
-│  ServiceId (PK)     │
-│  BusinessId         │
-│  ServiceName        │
-│  Duration           │
-│  Price              │
-└──────────┬──────────┘
+┌──────────────────────────┐
+│  Bookings_Services       │ (Dimension Table)
+│  ──────────────────────  │
+│  BusinessServiceKey (PK) │ ← Composite: "BusinessId|ServiceId"
+│  ServiceId               │
+│  BusinessId              │
+│  ServiceName             │
+│  Duration                │
+│  Price                   │
+└──────────┬───────────────┘
            │
            │ Many-to-One
-           ├─────────────────────────┐
-           │                         │
-┌──────────▼──────────────┐   ┌──────▼───────────┐
-│ Bookings_Appointments   │   │  Bookings_Staff  │ (Dimension Table)
-│ ─────────────────────   │   │  ──────────────  │
-│ AppointmentId (PK)      │   │  StaffId (PK)    │
-│ ServiceId (FK) ─────────┘   │  BusinessId      │
-│ StaffId (FK) ───────────────┤  StaffName       │
-│ BusinessId (FK)         │   │  StaffEmail      │
-│ CustomerName            │   │  Role            │
-│ StartDateTime           │   └──────────────────┘
-│ EndDateTime             │
-│ AppointmentDate         │
-└─────────────────────────┘
+           ├────────────────────────────────┐
+           │                                │
+┌──────────▼───────────────────┐   ┌───────▼──────────────┐
+│ Bookings_Appointments        │   │  Bookings_Staff      │ (Dimension Table)
+│ ──────────────────────────   │   │  ──────────────────  │
+│ AppointmentId (PK)           │   │  BusinessStaffKey(PK)│ ← Composite: "BusinessId|StaffId"
+│ BusinessServiceKey (FK) ─────┘   │  StaffId             │
+│ BusinessStaffKey (FK) ───────────┤  BusinessId          │
+│ BusinessId                   │   │  StaffName           │
+│ CustomerName                 │   │  StaffEmail          │
+│ StartDateTime                │   │  Role                │
+│ EndDateTime                  │   └──────────────────────┘
+│ AppointmentDate              │
+└──────────────────────────────┘
     (Fact Table)
 ```
 
 **Key:**
-- **PK** = Primary Key (unique identifier)
-- **FK** = Foreign Key (links to dimension table)
+- **PK** = Primary Key (unique identifier - composite keys ensure uniqueness across businesses)
+- **FK** = Foreign Key (links to dimension table using composite key)
 - **Fact Table** = Contains measurable events (appointments)
 - **Dimension Tables** = Contains descriptive attributes (services, staff)
 
@@ -69,6 +70,7 @@ The primary query that retrieves all appointments from all booking businesses in
 - Staff assignment (StaffId) - Creates one row per staff member for multi-staff appointments
 - Meeting details (IsLocationOnline, OnlineMeetingUrl)
 - Calculated fields (AppointmentDate, DayOfWeek, Month, Year)
+- **Composite Keys** (BusinessServiceKey, BusinessStaffKey) - For relationships with dimension tables
 
 **Important Note:** Appointments with multiple staff members (12.7% of appointments) will appear as multiple rows, one per assigned staff member. This "bridge table" pattern enables accurate many-to-many relationships between appointments and staff.
 
@@ -80,6 +82,7 @@ Retrieves all services from all booking businesses.
 - ServiceId, ServiceName
 - Duration, Price, PriceType
 - Description, IsHidden, MaxAttendees
+- **BusinessServiceKey** (Composite key: "BusinessId|ServiceId") - Primary key for relationships
 
 ### 3. **PowerQuery-Staff.m** (Staff Lookup Table)
 Retrieves all staff members from all booking businesses.
@@ -87,6 +90,9 @@ Retrieves all staff members from all booking businesses.
 **Output Columns:**
 - BusinessId, BusinessName
 - StaffId, StaffName, StaffEmail
+- Role, TimeZone
+- UseBusinessHours, EmailNotificationEnabled
+- **BusinessStaffKey** (Composite key: "BusinessId|StaffId") - Primary key for relationships
 - Role, TimeZone
 - UseBusinessHours, EmailNotificationEnabled
 
@@ -117,11 +123,11 @@ Repeat Step 1 for:
 1. Go to **Model View** (left sidebar icon)
 2. **Drag and drop** to create relationships:
    
-   **Primary Relationships:**
-   - **Bookings_Appointments[ServiceId]** → **Bookings_Services[ServiceId]** (Many-to-One)
-   - **Bookings_Appointments[StaffId]** → **Bookings_Staff[StaffId]** (Many-to-One)
-   - **Bookings_Appointments[BusinessId]** → **Bookings_Services[BusinessId]** (Many-to-One)
-   - **Bookings_Appointments[BusinessId]** → **Bookings_Staff[BusinessId]** (Many-to-One)
+   **Primary Relationships (Using Composite Keys):**
+   - **Bookings_Appointments[BusinessServiceKey]** → **Bookings_Services[BusinessServiceKey]** (Many-to-One)
+   - **Bookings_Appointments[BusinessStaffKey]** → **Bookings_Staff[BusinessStaffKey]** (Many-to-One)
+   
+   **Note:** These composite keys combine BusinessId and the unique ID (e.g., "ElectricIrelandSuperhomes@domain.ie|95241f06-...") to ensure uniqueness across multiple booking businesses. ServiceIds and StaffIds alone are NOT unique as the same GUID can appear in different businesses
 
 3. **Why This Matters:**
    - Enables proper filtering: Select a service/staff member → see related appointments
