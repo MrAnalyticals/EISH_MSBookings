@@ -119,11 +119,15 @@ let
     CombinedServices = Table.Combine(ServicesFromAllBusinesses),
     
     // Reorder columns
-    Result = Table.ReorderColumns(
+    ReorderedColumns = Table.ReorderColumns(
         CombinedServices,
         {"BusinessId", "BusinessName", "ServiceId", "ServiceDisplayName", 
          "ServiceDuration", "ServicePrice", "ServiceDescription"}
-    )
+    ),
+    
+    // Add composite key for relationship (BusinessId + ServiceId)
+    // This is needed because ServiceId alone is not unique across businesses
+    Result = Table.AddColumn(ReorderedColumns, "BusinessServiceKey", each [BusinessId] & "|" & [ServiceId], type text)
 in
     Result,
 

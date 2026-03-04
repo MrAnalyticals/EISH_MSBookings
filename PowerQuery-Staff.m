@@ -120,11 +120,15 @@ let
             CombinedStaff = Table.Combine(StaffFromAllBusinesses),
             
             // Reorder columns
-            Result = Table.ReorderColumns(
+            ReorderedColumns = Table.ReorderColumns(
                 CombinedStaff,
                 {"BusinessId", "BusinessName", "StaffId", "StaffName", "StaffEmail", 
                  "Role", "TimeZone", "UseBusinessHours", "EmailNotificationEnabled"}
-            )
+            ),
+            
+            // Add composite key for relationship (BusinessId + StaffId)
+            // This ensures StaffId is unique across all businesses
+            Result = Table.AddColumn(ReorderedColumns, "BusinessStaffKey", each [BusinessId] & "|" & [StaffId], type text)
         in
             Result,
     
